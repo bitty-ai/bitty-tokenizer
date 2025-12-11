@@ -6,7 +6,7 @@ This algorithm was popularized for LLMs by the GPT-2 paper and the associated GP
 
 Tokenizers are the reason why Language models work so well, hallucinates other time, doesnt work well in finance industry, and can make or break a system 
 
-Find medium link explaining tokenization here : <LINK>
+Find medium link explaining tokenization here : https://medium.com/@mohitdulani/train-a-tokenizer-from-scratch-4a33450d42ee
 
 To Download the data use these commands : 
 
