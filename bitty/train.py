@@ -1,11 +1,15 @@
 # training a tokenizer model from scratch 
 
-from collections import defaultdict
 import os
+import argparse
+import regex as re
+from collections import defaultdict
+
+from functools import partial
 from chunking import read_data_by_delimiter
 from typing import Dict
-import regex as re
-import multiprocessing as mp
+from multiprocessing import Queue, Process
+
 
 GPT_2_PATTERN = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
@@ -45,34 +49,61 @@ class Tokenizer:
             idx+=1
         return vocab
          
-    def pretokenizer(self, file_path: str):
-        # TODO : use multiprocessing here 
         
+    def _create_token_dictionary(self,text_chunk, queue):
+        # create a token dictionary for reading data 
+        partial_dict = defaultdict(int)
+        text_decoded = text_chunk.decode('utf-8', errors='replace')
+
         if self.special_tokens:
             patterns = [re.escape(token.decode('utf-8')) for token in self.special_tokens]
             special_token_pattern = '|'.join(patterns)
         else:
             special_token_pattern = None
 
-        for text_chunk in read_data_by_delimiter(file_path):
+
+        if special_token_pattern:
+            text_segments = re.split(special_token_pattern, text_decoded)
+        else:
+            text_segments = [text_decoded]
+
+        for segment in text_segments:
+            if not segment: continue
             
-            text_decoded = text_chunk.decode('utf-8', errors='replace')
+            words = re.findall(self.PATTERN, segment)
+            for word in words:
+                byte_word = tuple(bytes([b]) for b in word.encode('utf-8'))
+                partial_dict[byte_word] += 1
 
-            if special_token_pattern:
-                text_segments = re.split(special_token_pattern, text_decoded)
-            else:
-                text_segments = [text_decoded]
+        queue.put(partial_dict)
 
-            for segment in text_segments:
-                if not segment: continue
-                
-                words = re.findall(self.PATTERN, segment)
-                for word in words:
-                    byte_word = tuple(bytes([b]) for b in word.encode('utf-8'))
-                    self.word_bytes_freq_table[byte_word] += 1
 
-        return self.train()
+    def pretokenizer(self, file_path: str):
+        queue = Queue()
+
+        processes = []
+        for text_chunk in read_data_by_delimiter(file_path):
+            process = Process(target = self._create_token_dictionary, args = (text_chunk, queue))
+            processes.append(process)
+
+        for p in processes:
+            print('starting process :',p)
+            p.start()
         
+        results = []
+        for _ in processes:
+            results.append(queue.get())
+
+        for p in processes:
+            p.join()
+
+        for local in results:
+            for key, count in local.items():
+                self.word_bytes_freq_table[key] = self.word_bytes_freq_table.get(key, 0) + count
+            
+        return self.train()
+
+
     def train(self):
         num_merges = self.num_merges - len(self.vocabulary)
         for idx in range(num_merges):
@@ -149,7 +180,8 @@ class Tokenizer:
 
 
     def _each_word_to_bytes(self, word:str) -> list[int]:
-        byte_list = [ch.encode('utf-8') for ch in word] # b'O' , b'n' , b'c' , b'e' ... 
+        # byte_list = [ch.encode('utf-8') for ch in word] # b'O' , b'n' , b'c' , b'e' ... (this leads to incresed token cost / less total no. of merges) 
+        byte_list = [bytes([ch]) for ch in word.encode('utf-8')] # each word byte is considered as a seperate token in this   
         # character -> ’ <- this requires 3 bytes to be represented 
         self.rvocab = {v:k for k,v in self.vocab.items()}
 
@@ -204,7 +236,6 @@ class Tokenizer:
         return byte_buffer.decode('utf-8', errors='replace')
 
     
-import argparse
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train or load a tokenizer with optional arguments')
@@ -213,6 +244,7 @@ if __name__ == '__main__':
     default_test_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'test')
     
     default_training_file = os.path.join(default_data_path, 'TinyStoriesV2-GPT4-train.txt')
+    # default_training_file = os.path.join(default_data_path, 'TinyStoriesV2-GPT4-valid.txt')
     default_save_path = os.path.join(default_test_path, 'vocab.json')
 
     parser.add_argument('--training_dataset', type=str, default=default_training_file,
@@ -224,16 +256,20 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    tokenizer = Tokenizer(
-        dataset_path=args.training_dataset,
-        special_tokens=[b'<|endoftext|>'],
-        save_path=args.saving_path,
-        num_merges=args.num_merges,
-    )
+    # tokenizer = Tokenizer(
+    #     dataset_path=args.training_dataset,
+    #     special_tokens=[b'<|endoftext|>'],
+    #     save_path=args.saving_path,
+    #     num_merges=args.num_merges,
+    # )
 
     # sample for running this as a script : python train.py --training_dataset '' --saving_path '' --num_merges ''
 
+    #load this 
+    tokenizer = Tokenizer(file_path = default_save_path,special_tokens=[b'<|endoftext|>'])
+
     # Sanity check roundtrip
+    # text = 'Hello World around us ! 你好世界'
     text = 'Hello World around us !'
     encoded_text = tokenizer.encoder(text)
     print(f'encoded text : {len(encoded_text)}')
