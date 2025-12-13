@@ -15,7 +15,23 @@ GPT_2_PATTERN = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s
 
 class Tokenizer:
     
+    
     def __init__(self, * , dataset_path:str =None, file_path:str=None, vocab=None, special_tokens:list[bytes]=None, save_path:str = None, num_merges:int = 1000) -> None:
+        """
+        Initialize a Tokenizer instance.
+
+        Args:
+            dataset_path (str, optional): Path to a dataset for training or initializing the vocabulary.
+            file_path (str, optional): Path to a file containing a pre-existing vocabulary.
+            vocab (dict, optional): Pre-existing vocabulary mapping integers to byte tokens.
+            special_tokens (list[bytes], optional): List of special tokens to be included in the vocabulary.
+            save_path (str, optional): Path to save the trained tokenizer or vocabulary.
+            num_merges (int, optional): Number of merge operations for tokenization (default is 1000).
+
+        The Tokenizer supports three initialization methods, requiring at least one of
+        dataset_path, vocab, or file_path to provide a vocabulary source.
+        Utilizes a regex pattern based on the GPT-2 tokenizer for splitting tokens.
+        """
         self.PATTERN = GPT_2_PATTERN
         self.word_bytes_freq_table = defaultdict(int) # word-bytes -> freq count
         self.special_tokens = special_tokens

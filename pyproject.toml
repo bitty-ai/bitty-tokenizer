@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bitty-tokenizer"
-version = "0.1.0"
+version = "0.1.2"
 authors = [
   { name="Mohit", email="28mohit2002dulani@gmail.com" },
 ]
@@ -14,5 +14,8 @@ requires-python = ">=3.9"
 dependencies = []
 
 [project.scripts]
-# Optional: Allows users to run your tool from command line like: $ bitty-train
 bitty-train = "bitty.train:main"
+
+#poetry auto includes this but to make this better we use this 
+[tool.poetry]
+include = ["src/bitty/py.typed"]
