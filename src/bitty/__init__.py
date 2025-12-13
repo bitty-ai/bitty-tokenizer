@@ -1,4 +1,3 @@
-from .chunking import Tokenizer  # Adjust 'Tokenizer' to your actual class/func name
-from .train import train_model   # Adjust if you want to expose training logic
+from .train import Tokenizer  # Adjust 'Tokenizer' to your actual class/func name
 
-__all__ = ["Tokenizer", "train_model"]
+__all__ = ["Tokenizer"]

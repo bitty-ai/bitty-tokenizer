@@ -6,7 +6,7 @@ import regex as re
 from collections import defaultdict
 
 from functools import partial
-from chunking import read_data_by_delimiter
+from .chunking import read_data_by_delimiter
 from typing import Dict
 from multiprocessing import Queue, Process
 
