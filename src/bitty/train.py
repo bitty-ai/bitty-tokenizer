@@ -6,10 +6,9 @@ import regex as re
 from collections import defaultdict
 
 from functools import partial
-from .chunking import read_data_by_delimiter
+from bitty.chunking import read_data_by_delimiter
 from typing import Dict
 from multiprocessing import Queue, Process
-
 
 GPT_2_PATTERN = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
@@ -195,11 +194,15 @@ class Tokenizer:
         return vocab
 
 
-    def _each_word_to_bytes(self, word:str) -> list[int]:
+    def _each_word_to_bytes(self, word:str, special_token:bool = False) -> list[int]:
         # byte_list = [ch.encode('utf-8') for ch in word] # b'O' , b'n' , b'c' , b'e' ... (this leads to incresed token cost / less total no. of merges) 
         byte_list = [bytes([ch]) for ch in word.encode('utf-8')] # each word byte is considered as a seperate token in this   
         # character -> ’ <- this requires 3 bytes to be represented 
+
+        encoded=[]
         self.rvocab = {v:k for k,v in self.vocab.items()}
+        if special_token:
+            return [self.rvocab[word.encode('utf-8')]]
 
         i =0 
         while i<len(byte_list)-1:
@@ -213,7 +216,6 @@ class Tokenizer:
                 i+=1
 
         # final conversion of byte list to token 
-        encoded=[]
         for byte in byte_list:
             try: # most of the words will be in this bpe vocab if some characters like é are not there then go to bpe fallback  
                 encoded.append(self.rvocab[byte])
@@ -227,12 +229,30 @@ class Tokenizer:
 
 
     def encoder(self, text:str):
-        text_list = re.findall(self.PATTERN, text)
+        # first split this on the basis of special tokens 
+        re_escaped =[]
+        for st in self.special_tokens:
+            if isinstance(st, bytes):
+                st = st.decode('utf-8')
+
+            re_escaped.append(re.escape(st))
         
+        special_pattern = f"({'|'.join(re_escaped)})"
+        chunks= re.split(special_pattern, text)
+        final_tokens = []
+        for chunk in chunks:
+            if chunk.encode('utf-8') in self.special_tokens:
+                final_tokens.append(chunk)
+            else:
+                matches = re.findall(GPT_2_PATTERN, chunk)
+                final_tokens.extend(matches)
+
         encoded = []
-        for word in text_list:
+        for word in final_tokens:
             if word in self.cache:
                 word_tokens = self.cache[word]
+            elif word.encode('utf-8') in self.special_tokens:
+                word_tokens = self._each_word_to_bytes(word, special_token=True) # this should not be encoded 
             else:
                 word_tokens = self._each_word_to_bytes(word) 
                 self.cache[word] = word_tokens
@@ -240,7 +260,6 @@ class Tokenizer:
             encoded += word_tokens
 
         return encoded 
-
 
     def decoder(self, tokens:list[int]):
     
@@ -256,8 +275,8 @@ class Tokenizer:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train or load a tokenizer with optional arguments')
 
-    default_data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
-    default_test_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'test')
+    default_data_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data')
+    default_test_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'test')
     
     default_training_file = os.path.join(default_data_path, 'TinyStoriesV2-GPT4-train.txt')
     # default_training_file = os.path.join(default_data_path, 'TinyStoriesV2-GPT4-valid.txt')
@@ -286,9 +305,9 @@ if __name__ == '__main__':
 
     # Sanity check roundtrip
     # text = 'Hello World around us ! 你好世界'
-    text = 'Hello World around us !'
+    text = 'Hello World around us ! <|endoftext|>'
     encoded_text = tokenizer.encoder(text)
-    print(f'encoded text : {len(encoded_text)}')
+    print(f'encoded text : {encoded_text, len(encoded_text)}')
     decoded_text = tokenizer.decoder(encoded_text)
     assert decoded_text == text, f'Decoded text is {decoded_text} , should have been : {text} '
 
