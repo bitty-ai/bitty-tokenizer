@@ -4,7 +4,6 @@ import os
 import argparse
 import regex as re
 from collections import defaultdict
-
 from functools import partial
 from bitty.chunking import read_data_by_delimiter
 from typing import Dict
@@ -181,8 +180,8 @@ class Tokenizer:
         with open(self.save_path , 'w') as f:
             json.dump(string_vocab, f, indent = 2)
 
-
-    def load_vocab(self, file_path:str):
+    @classmethod
+    def load_vocab(cls, file_path:str):
         import json
         with open(file_path, 'r') as f:
             data = json.load(f)
